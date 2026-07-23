@@ -1,0 +1,6 @@
+build/
+sdkconfig.old
+.metadata/
+.project
+.cproject
+.settings/
