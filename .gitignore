@@ -4,3 +4,4 @@ sdkconfig.old
 .project
 .cproject
 .settings/
+managed_components/
