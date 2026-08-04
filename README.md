@@ -1,11 +1,10 @@
-ESP-IDF template app
+DRIVER FOR SHT4X SENSOR
 ====================
+Driver for SHT4x sensor using Espressifs HAL I2C layer esp_driver_i2c.
+## IMPORTANT
+This driver does not initialize the master bus to give flexibility to the user
+Please follow Espressifs excellent I2C programming guide to set up the master bus.<br>
+:link: (https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/i2c.html)
 
-This is a template application to be used with [Espressif IoT Development Framework](https://github.com/espressif/esp-idf).
 
-Please check [ESP-IDF docs](https://docs.espressif.com/projects/esp-idf/en/latest/get-started/index.html) for getting started instructions.
 
-*Code in this repository is in the Public Domain (or CC0 licensed, at your option.)
-Unless required by applicable law or agreed to in writing, this
-software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-CONDITIONS OF ANY KIND, either express or implied.*
