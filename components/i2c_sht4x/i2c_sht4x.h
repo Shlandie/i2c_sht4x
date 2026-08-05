@@ -1,6 +1,7 @@
 #pragma once
 
 #include "driver/i2c_master.h"
+#include "hal/i2c_types.h"
 
 #define CMD_RESET             0x94
 #define CMD_SERIAL            0x89
@@ -15,6 +16,50 @@
 #define CMD_MEAS_H_LOW_SHORT  0x15
 
 
+typedef enum
+{
+    SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
+    SHT4X_HEATER_HIGH_LONG,    /**< High power (~200mW), 1 second pulse */
+    SHT4X_HEATER_HIGH_SHORT,   /**< High power (~200mW), 0.1 second pulse */
+    SHT4X_HEATER_MEDIUM_LONG,  /**< Medium power (~110mW), 1 second pulse */
+    SHT4X_HEATER_MEDIUM_SHORT, /**< Medium power (~110mW), 0.1 second pulse */
+    SHT4X_HEATER_LOW_LONG,     /**< Low power (~20mW), 1 second pulse */
+    SHT4X_HEATER_LOW_SHORT,    /**< Low power (~20mW), 0.1 second pulse */
+} sht4x_heater_t;
+
+typedef enum
+{
+	SHT4X_ADDR_1 = 0x44,
+	SHT4X_ADDR_2 = 0x45,
+	SHT4X_ADDR_3 = 0x46
+}sht4x_scl_adress_t;
+
+typedef enum
+{
+	STANDARD = 100000,
+	FAST_MODE = 400000,
+	FAST_MODE_PLUS = 1000000
+}sht4x_scl_speed_t;
+
+
 typedef struct sht4x
 {
+	i2c_master_dev_handle_t dev_handle;
+	sht4x_heater_t heater;
 }sht4x_t;
+
+
+/*
+* Initialize I2C slave device according to its constraints
+* @param master_bus_handle		Handle to the I2C master bus
+* @param device_addr 			SHT4x addr
+* @param speed_mode  			I2C speed mode of this master and slave communication
+* @param disable_ack_check		Disable ACK check. If this is set false, that means ack check is enabled, the transaction will be stopped and API returns error when nack is detected.		
+*/
+void sht4x_i2c_device_init(i2c_master_bus_handle_t master_bus_handle, sht4x_t device_dev, sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
+
+
+
+
+
+
