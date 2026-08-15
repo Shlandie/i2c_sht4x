@@ -6,17 +6,8 @@
 #include "hal/i2c_types.h"
 
 
-#define CMD_RESET             0x94
-#define CMD_SERIAL            0x89
-#define CMD_MEAS_HIGH         0xfd
-#define CMD_MEAS_MED          0xf6
-#define CMD_MEAS_LOW          0xe0
-#define CMD_MEAS_H_HIGH_LONG  0x39
-#define CMD_MEAS_H_HIGH_SHORT 0x32
-#define CMD_MEAS_H_MED_LONG   0x2f
-#define CMD_MEAS_H_MED_SHORT  0x24
-#define CMD_MEAS_H_LOW_LONG   0x1e
-#define CMD_MEAS_H_LOW_SHORT  0x15
+#define SHT4X_MUTEX_TIMEOUT				100
+#define SHT4X_TRANSACTION_TIMEOUT		100
 
 
 typedef enum
@@ -54,7 +45,7 @@ typedef struct i2c_master_bus
 typedef struct sht4x
 {
 	i2c_master_dev_handle_t dev_handle;
-	SemaphoreHandle_t *master_bus_mutex;
+	SemaphoreHandle_t master_bus_mutex;
 	
 	sht4x_heater_t heater;
 }sht4x_t;
@@ -76,6 +67,12 @@ sht4x_i2c_master_bus_ctx_t sht4x_i2c_master_bus_init(i2c_master_bus_config_t mas
 * @return sht4x_t				Device descriptor
 */
 sht4x_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus, sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
+
+/*
+ * Soft resets the sht4x device
+ * @param device		device descriptor
+ */
+void sht4x_reset_device(sht4x_t *device);
 
 
 
