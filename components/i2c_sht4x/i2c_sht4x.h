@@ -12,17 +12,6 @@
 
 typedef enum
 {
-    SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
-    SHT4X_HEATER_HIGH_LONG,    /**< High power (~200mW), 1 second pulse */
-    SHT4X_HEATER_HIGH_SHORT,   /**< High power (~200mW), 0.1 second pulse */
-    SHT4X_HEATER_MEDIUM_LONG,  /**< Medium power (~110mW), 1 second pulse */
-    SHT4X_HEATER_MEDIUM_SHORT, /**< Medium power (~110mW), 0.1 second pulse */
-    SHT4X_HEATER_LOW_LONG,     /**< Low power (~20mW), 1 second pulse */
-    SHT4X_HEATER_LOW_SHORT,    /**< Low power (~20mW), 0.1 second pulse */
-} sht4x_heater_t;
-
-typedef enum
-{
 	SHT4X_ADDR_1 = 0x44,
 	SHT4X_ADDR_2 = 0x45,
 	SHT4X_ADDR_3 = 0x46
@@ -36,18 +25,30 @@ typedef enum
 }sht4x_scl_speed_t;
 
 
+typedef enum
+{
+    SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
+    SHT4X_HEATER_HIGH_LONG,    /**< High power (~200mW), 1 second pulse */
+    SHT4X_HEATER_HIGH_SHORT,   /**< High power (~200mW), 0.1 second pulse */
+    SHT4X_HEATER_MEDIUM_LONG,  /**< Medium power (~110mW), 1 second pulse */
+    SHT4X_HEATER_MEDIUM_SHORT, /**< Medium power (~110mW), 0.1 second pulse */
+    SHT4X_HEATER_LOW_LONG,     /**< Low power (~20mW), 1 second pulse */
+    SHT4X_HEATER_LOW_SHORT,    /**< Low power (~20mW), 0.1 second pulse */
+} sht4x_heater_t;
+
+
 typedef struct i2c_master_bus
 {
 	i2c_master_bus_handle_t master_bus_handle;
-	SemaphoreHandle_t master_bus_mutex;
+	SemaphoreHandle_t master_bus_mutex;				// Mutex for the port
 }sht4x_i2c_master_bus_ctx_t;
 
 typedef struct sht4x
 {
-	i2c_master_dev_handle_t dev_handle;
-	SemaphoreHandle_t master_bus_mutex;
+	i2c_master_dev_handle_t dev_handle;					
+	SemaphoreHandle_t master_bus_mutex;				// Place to hold the mutex for the port the device uses
 	
-	sht4x_heater_t heater;
+	sht4x_heater_t heater;							// 
 }sht4x_t;
 
 
@@ -72,7 +73,14 @@ sht4x_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus, sht4x_scl_
  * Soft resets the sht4x device
  * @param device		device descriptor
  */
-void sht4x_reset_device(sht4x_t *device);
+esp_err_t sht4x_reset_device(sht4x_t *device);
+
+/*
+ * Read and return temperature and humidity in integer format. Turn on heater if a mode is specified in the descriptor
+ * @param device		device desriptor
+ * @param temperature	
+ */
+esp_err_t sht4x_measure(sht4x_t);
 
 
 

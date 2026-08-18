@@ -48,7 +48,7 @@ sht4x_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_dev, sht4x_
 	return device;
 }
 
-void sht4x_reset_device(sht4x_t *device)
+esp_err_t sht4x_reset_device(sht4x_t *device)
 {
 	uint8_t cmd = CMD_RESET; 
 	
