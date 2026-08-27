@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "esp_check.h"
 #include "esp_log.h"
@@ -30,21 +31,24 @@ static void sht4x_restore_access(void *arg)
 {
 	sht4x_t *device = (sht4x_t* ) arg;
 	xSemaphoreGive(device->device_access_mutex);
-	esp_timer_delete(device->timer);
 }
 
 
-sht4x_i2c_master_bus_ctx_t sht4x_i2c_master_bus_init(i2c_master_bus_config_t master_bus_config)
+esp_err_t sht4x_i2c_master_bus_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, i2c_master_bus_config_t master_bus_config)
 {
-	sht4x_i2c_master_bus_ctx_t master_bus = {0};
+	esp_err_t ret = ESP_OK;
 	
-	i2c_new_master_bus(&master_bus_config, &master_bus.master_bus_handle);
-	master_bus.master_bus_mutex = xSemaphoreCreateMutex();
+	memset(master_bus_ctx, 0, sizeof(sht4x_i2c_master_bus_ctx_t));
+
+	ret = i2c_new_master_bus(&master_bus_config, &(master_bus_ctx->master_bus_handle));
+	ESP_RETURN_ON_ERROR(ret, TAG, "I2C PORT %d INIT FAILED", master_bus_config.i2c_port);
 	
-	return master_bus;
+	master_bus_ctx->master_bus_mutex = xSemaphoreCreateMutex();
+	
+	return ret;
 }
 
-esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_dev, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check)
+esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check)
 {
 	esp_err_t ret = ESP_OK;
 	
@@ -56,11 +60,11 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_dev, sht4
 		.scl_wait_us				= 0,
 		.flags.disable_ack_check 	= disable_ack_check 
 	};
-	ret = i2c_master_bus_add_device(master_bus_dev->master_bus_handle, &dev_config, &(device_desc->dev_handle));
+	ret = i2c_master_bus_add_device(master_bus_ctx->master_bus_handle, &dev_config, &(device_desc->dev_handle));
 	ESP_RETURN_ON_ERROR(ret, TAG, "SHT4X I2C DEVICE INIT FAILED");
 	
 	// Get port mutex on device descriptor for easier access and create mutex for device access
-	device_desc->master_bus_mutex = master_bus_dev->master_bus_mutex;
+	device_desc->master_bus_mutex = master_bus_ctx->master_bus_mutex;
 	device_desc->device_access_mutex = xSemaphoreCreateMutex();
 	
 	// Create timer which callbacks to give the device access mutex back

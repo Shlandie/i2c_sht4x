@@ -73,7 +73,7 @@ typedef struct sht4x
 * @param i2c_master_bus_config_t	Configuration struct of the master bus
 * @return sht4x_i2c_master_bus_ctx_t
 */
-sht4x_i2c_master_bus_ctx_t sht4x_i2c_master_bus_init(i2c_master_bus_config_t master_bus_config);
+esp_err_t sht4x_i2c_master_bus_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, i2c_master_bus_config_t master_bus_config);
 
 /*
 * Initialize I2C slave device according to its constraints
