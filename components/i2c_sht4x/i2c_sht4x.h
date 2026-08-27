@@ -1,14 +1,28 @@
 #pragma once
 
-
-#include "driver/i2c_master.h"
 #include "freertos/idf_additions.h"
+
+#include "esp_timer.h"
+#include "driver/i2c_master.h"
 #include "hal/i2c_types.h"
 
 
-#define SHT4X_MUTEX_TIMEOUT				100
-#define SHT4X_TRANSACTION_TIMEOUT		100
+// Edit mutex timeout values. All in milliseconds
+#define SHT4X_MASTER_MUTEX_TIMEOUT				100
+#define SHT4X_DEVICE_MUTEX_TIMEOUT				100
+#define SHT4X_TRANSACTION_TIMEOUT				100
 
+
+typedef enum
+{
+    SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
+    SHT4X_HEATER_HIGH_LONG,    /**< High power (~200mW), 1 second pulse */
+    SHT4X_HEATER_HIGH_SHORT,   /**< High power (~200mW), 0.1 second pulse */
+    SHT4X_HEATER_MEDIUM_LONG,  /**< Medium power (~110mW), 1 second pulse */
+    SHT4X_HEATER_MEDIUM_SHORT, /**< Medium power (~110mW), 0.1 second pulse */
+    SHT4X_HEATER_LOW_LONG,     /**< Low power (~20mW), 1 second pulse */
+    SHT4X_HEATER_LOW_SHORT,    /**< Low power (~20mW), 0.1 second pulse */
+} sht4x_heater_t;
 
 typedef enum
 {
@@ -24,17 +38,14 @@ typedef enum
 	FAST_MODE_PLUS 	= 1000000
 }sht4x_scl_speed_t;
 
-
+// Used together with device_access_mutex in sht4x_t to deny access for specific periods when the sensor is measuring, soft-resetting (IN MICROSECONDS)
 typedef enum
 {
-    SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
-    SHT4X_HEATER_HIGH_LONG,    /**< High power (~200mW), 1 second pulse */
-    SHT4X_HEATER_HIGH_SHORT,   /**< High power (~200mW), 0.1 second pulse */
-    SHT4X_HEATER_MEDIUM_LONG,  /**< Medium power (~110mW), 1 second pulse */
-    SHT4X_HEATER_MEDIUM_SHORT, /**< Medium power (~110mW), 0.1 second pulse */
-    SHT4X_HEATER_LOW_LONG,     /**< Low power (~20mW), 1 second pulse */
-    SHT4X_HEATER_LOW_SHORT,    /**< Low power (~20mW), 0.1 second pulse */
-} sht4x_heater_t;
+	SOFT_RESET_TIMEOFF			= 1000,
+	LOW_REPEAT_TIMEOFF			= 1600,
+	MEDIUM_REPEAT_TIMEOFF		= 4500,
+	HIGH_REPEAT_TIMEOFF			= 8300
+}sht4x_access_timeoff_t;
 
 
 typedef struct i2c_master_bus
@@ -45,10 +56,15 @@ typedef struct i2c_master_bus
 
 typedef struct sht4x
 {
+	// Configure on-the-go
+	sht4x_heater_t heater;
+	
+	// Don't touch
 	i2c_master_dev_handle_t dev_handle;					
 	SemaphoreHandle_t master_bus_mutex;				// Place to hold the mutex for the port the device uses
 	
-	sht4x_heater_t heater;							// 
+	SemaphoreHandle_t device_access_mutex;			// Protects access to the device while it's measuring, booting from soft-reset  							 
+	esp_timer_handle_t timer;				// To track the callback that give the device_access_mutex
 }sht4x_t;
 
 
@@ -62,12 +78,13 @@ sht4x_i2c_master_bus_ctx_t sht4x_i2c_master_bus_init(i2c_master_bus_config_t mas
 /*
 * Initialize I2C slave device according to its constraints
 * @param master_bus_handle		Handle to the I2C master bus
+* @param device_desc			sht4x_t device descriptor
 * @param device_addr 			SHT4x addr
 * @param speed_mode  			I2C speed mode of this master and slave communication
 * @param disable_ack_check		Disable ACK check. If this is set false, that means ack check is enabled, the transaction will be stopped and API returns error when nack is detected.		
 * @return sht4x_t				Device descriptor
 */
-sht4x_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus, sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
+esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_dev, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
 
 /*
  * Soft resets the sht4x device
