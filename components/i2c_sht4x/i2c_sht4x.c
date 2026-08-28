@@ -24,10 +24,69 @@
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
 
 
+// Used together with device_access_mutex in sht4x_t to deny access for specific periods when the sensor is measuring, soft-resetting (IN MICROSECONDS)
+typedef enum
+{
+	SOFT_RESET_TIMEOFF			= 1000,
+	LOW_REPEAT_TIMEOFF			= 1600,
+	MEDIUM_REPEAT_TIMEOFF		= 4500,
+	HIGH_REPEAT_TIMEOFF			= 8300
+}sht4x_access_timeoff_t;
+
+
 static const char TAG[] = "I2C_SHT4X";
 
 
-static void sht4x_restore_access(void *arg)
+static inline sht4x_access_timeoff_t get_access_restrict_time(sht4x_t *device_desc)
+{
+	if (device_desc->heater == SHT4X_HEATER_OFF)
+	{
+		switch(device_desc->repeatability)
+		{
+			case SHT4X_REPEAT_HIGH:
+				return HIGH_REPEAT_TIMEOFF;
+			case SHT4X_REPEAT_MEDIUM:
+				return MEDIUM_REPEAT_TIMEOFF;
+			case SHT4X_REPEAT_LOW:
+				return LOW_REPEAT_TIMEOFF;
+		}
+	}
+	else
+	{
+		return HIGH_REPEAT_TIMEOFF;
+	}	
+}
+
+static inline uint8_t get_cmd(sht4x_t *device_desc)
+{
+		switch (device_desc->heater)
+		{
+			case SHT4X_HEATER_OFF:
+				switch (device_desc->repeatability)
+				{
+					case SHT4X_REPEAT_HIGH:
+						return CMD_MEAS_HIGH;
+					case SHT4X_REPEAT_MEDIUM:
+						return CMD_MEAS_MED;
+					case SHT4X_REPEAT_LOW:
+						return CMD_MEAS_LOW;
+				}
+			case SHT4X_HEATER_HIGH_LONG:
+				return CMD_MEAS_H_HIGH_LONG;
+			case SHT4X_HEATER_HIGH_SHORT:
+				return CMD_MEAS_H_HIGH_SHORT;
+			case SHT4X_HEATER_MEDIUM_LONG:
+				return CMD_MEAS_H_MED_LONG;
+			case SHT4X_HEATER_MEDIUM_SHORT:
+				return CMD_MEAS_H_MED_SHORT;
+			case SHT4X_HEATER_LOW_LONG:
+				return CMD_MEAS_H_LOW_LONG;
+			case SHT4X_HEATER_LOW_SHORT:
+				return CMD_MEAS_H_LOW_SHORT;
+		}	
+}
+
+static void restore_device_access(void *arg)
 {
 	sht4x_t *device = (sht4x_t* ) arg;
 	xSemaphoreGive(device->device_access_mutex);
@@ -71,7 +130,7 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 	const esp_timer_create_args_t timer_args = {
 		.name =  "sht4x_restore_access",
 		.dispatch_method = ESP_TIMER_TASK,
-		.callback = sht4x_restore_access,
+		.callback = restore_device_access,
 		.arg = device_desc
 	};
 	ret = esp_timer_create(&timer_args, &(device_desc->timer));
@@ -108,6 +167,12 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 	// If transmission or timer callback creation fails, device timeout is not needed. Return the device mutex
 	cleanup:
 	xSemaphoreGive(device_desc->device_access_mutex);
-	return ret;
-		
+	return ret;	
 }
+
+esp_err_t sht4x_measure(sht4x_t *device_desc)
+{
+	
+}
+
+

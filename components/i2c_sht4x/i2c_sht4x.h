@@ -13,6 +13,15 @@
 #define SHT4X_TRANSACTION_TIMEOUT				100
 
 
+// Sensor repeatability mode when measuring
+typedef enum
+{
+	SHT4X_REPEAT_HIGH = 0,				// Measuring time: 8.3ms
+	SHT4X_REPEAT_MEDIUM,				// 4.5ms
+	SHT4X_REPEAT_LOW					// 1.6ms
+} sht4x_repeatability_t;
+
+// Sensor heater mode when measuring
 typedef enum
 {
     SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
@@ -24,6 +33,7 @@ typedef enum
     SHT4X_HEATER_LOW_SHORT,    /**< Low power (~20mW), 0.1 second pulse */
 } sht4x_heater_t;
 
+// SHT4X possible addresses
 typedef enum
 {
 	SHT4X_ADDR_1 = 0x44,
@@ -31,6 +41,7 @@ typedef enum
 	SHT4X_ADDR_3 = 0x46
 }sht4x_scl_adress_t;
 
+// I2C speed mode on which the device runs on
 typedef enum
 {
 	STANDARD 		= 100000,
@@ -38,26 +49,19 @@ typedef enum
 	FAST_MODE_PLUS 	= 1000000
 }sht4x_scl_speed_t;
 
-// Used together with device_access_mutex in sht4x_t to deny access for specific periods when the sensor is measuring, soft-resetting (IN MICROSECONDS)
-typedef enum
-{
-	SOFT_RESET_TIMEOFF			= 1000,
-	LOW_REPEAT_TIMEOFF			= 1600,
-	MEDIUM_REPEAT_TIMEOFF		= 4500,
-	HIGH_REPEAT_TIMEOFF			= 8300
-}sht4x_access_timeoff_t;
-
 
 typedef struct i2c_master_bus
 {
+	// Don't touch
 	i2c_master_bus_handle_t master_bus_handle;
-	SemaphoreHandle_t master_bus_mutex;				// Mutex for the port
+	SemaphoreHandle_t master_bus_mutex;				// Mutex for the port access
 }sht4x_i2c_master_bus_ctx_t;
 
 typedef struct sht4x
 {
 	// Configure on-the-go
-	sht4x_heater_t heater;
+	sht4x_repeatability_t repeatability; 			// The accuracy at which the device measures. High repeatability means it measures more times thus granting a more accurate result, although it takes more time complete the measurement. When heater is on repeatability is always HIGH
+	sht4x_heater_t heater;							// Determines the strength of the heating and the amount of time it heats. Used to fight condensation on the sensor
 	
 	// Don't touch
 	i2c_master_dev_handle_t dev_handle;					
@@ -82,22 +86,23 @@ esp_err_t sht4x_i2c_master_bus_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, 
 * @param device_addr 			SHT4x addr
 * @param speed_mode  			I2C speed mode of this master and slave communication
 * @param disable_ack_check		Disable ACK check. If this is set false, that means ack check is enabled, the transaction will be stopped and API returns error when nack is detected.		
-* @return sht4x_t				Device descriptor
+* @return esp_err_t				
 */
-esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_dev, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
+esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
 
 /*
  * Soft resets the sht4x device
- * @param device		device descriptor
+ * @param device_desc		device descriptor
+ * @return esp_err_t
  */
-esp_err_t sht4x_reset_device(sht4x_t *device);
+esp_err_t sht4x_reset_device(sht4x_t *device_desc);
 
 /*
- * Read and return temperature and humidity in integer format. Turn on heater if a mode is specified in the descriptor
- * @param device		device desriptor
- * @param temperature	
+ * Send command for the device to start measuring temperature and humidty. Turn on heater if a mode is specified in the descriptor
+ * @param device_desc		sht4x_t device desriptor
+ * @return esp_err_t	
  */
-esp_err_t sht4x_measure(sht4x_t);
+esp_err_t sht4x_measure(sht4x_t *device_desc);
 
 
 
