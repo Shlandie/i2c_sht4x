@@ -143,11 +143,11 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 
 esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 {
-	// esp_err_t for ESP error handling macros
-	esp_err_t ret = ESP_OK;
-	
 	// Take current device semaphore
 	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
+	
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
 	
 	// Take port mutex which the current device is on. Send the reset command
 	const uint8_t cmd = CMD_SOFT_RESET;	
@@ -156,23 +156,49 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C SOFT-RESET CMD TRANSMISSION FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
-	ESP_LOGI(TAG, "SHT4X device (soft) reset");
+	ESP_LOGI(TAG, "SHT4X device (soft) reset command sent");
 	
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	ret = esp_timer_start_once(device_desc->timer, SOFT_RESET_TIMEOFF);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE. DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
 	
 	return ret;
 	
 	// If transmission or timer callback creation fails, device timeout is not needed. Return the device mutex
 	cleanup:
+	xSemaphoreGive(device_desc->master_bus_mutex);
 	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
 }
 
 esp_err_t sht4x_measure(sht4x_t *device_desc)
 {
+	// Take current device semaphore
+	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
 	
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
+	
+	// Take port mutex which the current device is on. Send the measure command
+	uint8_t cmd = get_cmd(device_desc);
+	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C MEASURE CMD TRANSMISSION FAILED");
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	
+	ESP_LOGI(TAG, "SHT4X device measurement command sent");
+	
+	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
+	sht4x_access_timeoff_t delay = get_access_restrict_time(device_desc);
+	ret = esp_timer_start_once(device_desc->timer, delay);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
+	
+	return ret;
+	
+	cleanup:
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;	
 }
 
 

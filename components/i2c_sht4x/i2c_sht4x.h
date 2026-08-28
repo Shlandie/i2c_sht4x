@@ -59,7 +59,7 @@ typedef struct i2c_master_bus
 
 typedef struct sht4x
 {
-	// Configure on-the-go
+	// Configure before passing descriptor to functions
 	sht4x_repeatability_t repeatability; 			// The accuracy at which the device measures. High repeatability means it measures more times thus granting a more accurate result, although it takes more time complete the measurement. When heater is on repeatability is always HIGH
 	sht4x_heater_t heater;							// Determines the strength of the heating and the amount of time it heats. Used to fight condensation on the sensor
 	
