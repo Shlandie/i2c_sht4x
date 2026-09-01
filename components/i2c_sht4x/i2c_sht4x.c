@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "driver/i2c_master.h"
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -194,6 +195,33 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
 	
 	return ret;
+	
+	cleanup:
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;	
+}
+
+esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t humidity)
+{
+	// Take current device semaphore
+	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
+		
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
+	
+	// Take port mutex which the current device is on. Send I2C read
+	uint8_t read_buffer[4] = {0};
+	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, 4, SHT4X_TRANSACTION_TIMEOUT);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C READ FAILED");
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	
+	
+	
+	// Give back device access semaphore and return
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;	
 	
 	cleanup:
 	xSemaphoreGive(device_desc->master_bus_mutex);

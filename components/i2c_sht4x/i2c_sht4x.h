@@ -74,37 +74,45 @@ typedef struct sht4x
 
 /*
 * Initialize I2C master bus handle and create mutex for this exact master bus
-* @param i2c_master_bus_config_t	Configuration struct of the master bus
-* @return sht4x_i2c_master_bus_ctx_t
+* @param master_bus_ctx[out]		Struct of the master bus context				
+* @param master_bus_config			Configuration struct of the master bus
+* @return esp_err_t					`ESP_OK` on success
 */
 esp_err_t sht4x_i2c_master_bus_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, i2c_master_bus_config_t master_bus_config);
 
 /*
 * Initialize I2C slave device according to its constraints
 * @param master_bus_handle		Handle to the I2C master bus
-* @param device_desc			sht4x_t device descriptor
+* @param device_desc[out]		sht4x_t device descriptor
 * @param device_addr 			SHT4x addr
 * @param speed_mode  			I2C speed mode of this master and slave communication
 * @param disable_ack_check		Disable ACK check. If this is set false, that means ack check is enabled, the transaction will be stopped and API returns error when nack is detected.		
-* @return esp_err_t				
+* @return esp_err_t				`ESP_OK` on success
 */
 esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
 
 /*
  * Soft resets the sht4x device
  * @param device_desc		device descriptor
- * @return esp_err_t
+ * @return esp_err_t		`ESP_OK` on success
  */
 esp_err_t sht4x_reset_device(sht4x_t *device_desc);
 
 /*
- * Send command for the device to start measuring temperature and humidty. Turn on heater if a mode is specified in the descriptor
+ * Send command for the device to start measuring temperature and humidty to later retrieve. Turn on heater if a mode is specified in the descriptor
  * @param device_desc		sht4x_t device desriptor
- * @return esp_err_t	
+ * @return esp_err_t		`ESP_OK` on success
  */
 esp_err_t sht4x_measure(sht4x_t *device_desc);
 
-
+/*
+ * Send command I2C read to retrieve temperature and humidity data from the sensor. Data returns in integer format
+ * @param device_desc			sht4x_t device desriptor
+ * @param[out] temperature  	variable to put the measured temperature into
+ * @param[out] humidity	  		variable to put the measured humidity into
+ * @return esp_err_t			`ESP_OK` on success
+ */
+esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t humidity)
 
 
 
