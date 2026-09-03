@@ -21,7 +21,7 @@ typedef enum
 	SHT4X_REPEAT_LOW					// 1.6ms
 } sht4x_repeatability_t;
 
-// Sensor heater mode when measuring
+// Sensor heater mode when measuring. Power values are given at 3.3V VDD
 typedef enum
 {
     SHT4X_HEATER_OFF = 0,      /**< Heater is off, default */
@@ -112,7 +112,7 @@ esp_err_t sht4x_measure(sht4x_t *device_desc);
  * @param[out] humidity	  		variable to put the measured humidity into
  * @return esp_err_t			`ESP_OK` on success
  */
-esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t humidity)
+esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidity)
 
 
 

@@ -21,8 +21,13 @@
 #define CMD_MEAS_H_LOW_LONG   		0x1e
 #define CMD_MEAS_H_LOW_SHORT  		0x15
 
+#define DATA_READ_LENGTH			6
+
 #define CHECK(x) do { esp_err_t __; if ((__ = x) != ESP_OK) return __; } while (0)
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
+#define COMPARE_VAL(x, y) do { if (x != y) ret = ESP_FAIL; } while (0)
+//#define LOG_IF_ERR(x, log_tag, format, ...) \ 
+//	do { if (x != ESP_OK) ESP_LOGE(log_tag, "%s(%d): " format, __FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
 
 
 // Used together with device_access_mutex in sht4x_t to deny access for specific periods when the sensor is measuring, soft-resetting (IN MICROSECONDS)
@@ -37,6 +42,44 @@ typedef enum
 
 static const char TAG[] = "I2C_SHT4X";
 
+
+static inline uint8_t crop_humidity(uint16_t humidity_data)
+{
+	// Calculate humidity only using integers. Multiply by 100 because need precision from floats
+	int32_t humidity = (-6 * 100 + (125 * 100 * humidity_data) / 65535);
+	// Round to closest integer
+	humidity += 500;
+	// Loose the integer multiplication caused by the absence of floats
+	humidity /= 100;
+	
+	// Humidity can be above 100 or below 0. Remove that
+	if (humidity > 100)
+	{
+		return 100;
+	}
+	else if (humidity < 0)
+	{
+		return 0;
+	}
+	else
+	{
+		return humidity;
+	}
+}
+
+static uint8_t crc_check(const uint8_t *data)
+{
+    uint8_t crc = 0xFF;                    
+    for (uint8_t i = 0; i < 2; i++) {
+        crc ^= *(data + i);                    
+        for (int b = 0; b < 8; b++) {      
+            crc = (crc & 0x80)
+                  ? (crc << 1) ^ 0x31       
+                  : (crc << 1);             
+        }
+    }
+    return crc;                            
+}
 
 static inline sht4x_access_timeoff_t get_access_restrict_time(sht4x_t *device_desc)
 {
@@ -87,6 +130,7 @@ static inline uint8_t get_cmd(sht4x_t *device_desc)
 		}	
 }
 
+// Callback used in esp_timer_create
 static void restore_device_access(void *arg)
 {
 	sht4x_t *device = (sht4x_t* ) arg;
@@ -154,22 +198,25 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 	const uint8_t cmd = CMD_SOFT_RESET;	
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C SOFT-RESET CMD TRANSMISSION FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup2, TAG, "I2C SOFT-RESET CMD TRANSMISSION FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	ESP_LOGI(TAG, "SHT4X device (soft) reset command sent");
 	
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	ret = esp_timer_start_once(device_desc->timer, SOFT_RESET_TIMEOFF);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
+	ESP_GOTO_ON_ERROR(ret, cleanup1, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
 	
 	return ret;
 	
-	// If transmission or timer callback creation fails, device timeout is not needed. Return the device mutex
-	cleanup:
+	cleanup1:
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;
+
+	cleanup2:
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	xSemaphoreGive(device_desc->device_access_mutex);
-	return ret;	
+	return ret;
 }
 
 esp_err_t sht4x_measure(sht4x_t *device_desc)
@@ -184,7 +231,7 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	uint8_t cmd = get_cmd(device_desc);
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C MEASURE CMD TRANSMISSION FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup2, TAG, "I2C MEASURE CMD TRANSMISSION FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	ESP_LOGI(TAG, "SHT4X device measurement command sent");
@@ -192,17 +239,21 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	sht4x_access_timeoff_t delay = get_access_restrict_time(device_desc);
 	ret = esp_timer_start_once(device_desc->timer, delay);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
+	ESP_GOTO_ON_ERROR(ret, cleanup1, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
 	
 	return ret;
 	
-	cleanup:
+	cleanup1:
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;
+	
+	cleanup2:
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
 }
 
-esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t humidity)
+esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidity)
 {
 	// Take current device semaphore
 	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
@@ -211,19 +262,47 @@ esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t humidit
 	esp_err_t ret = ESP_OK;
 	
 	// Take port mutex which the current device is on. Send I2C read
-	uint8_t read_buffer[4] = {0};
+	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
-	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, 4, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C READ FAILED");
+	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
+	ESP_GOTO_ON_ERROR(ret, cleanup2, TAG, "I2C READ FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
+	// Check data validity via CRC
+	// CRC check temperatues data 
+	uint8_t crc = crc_check(&read_buffer[0]);
+	// Compare calculated vs sent CRC values
+	COMPARE_VAL(crc, read_buffer[2]);
+	if(ret == ESP_FAIL)
+	{
+		ESP_LOGE(TAG, "CRC check for temperature failed");
+		ret = ESP_OK;
+	}
+	else 
+	{
+		// If ESP_OK calculate and put data into supplied pointer
+		uint16_t temperature_data 	= ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
+		*temperature	= ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 500) / 100;
+	}
 	
+	// CRC check humidity data
+	crc = crc_check(&read_buffer[3]);
+	COMPARE_VAL(crc, read_buffer[5]);
+	if(ret == ESP_FAIL)
+	{
+		ESP_LOGE(TAG, "CRC check for humidity failed");
+	}
+	else 
+	{
+		uint16_t temperature_data 	= ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
+		*temperature	= ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 500) / 100;
+	}
 	
-	// Give back device access semaphore and return
+	// Give back current device access semaphore and return
 	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
 	
-	cleanup:
+	cleanup2:
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
