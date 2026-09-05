@@ -112,7 +112,7 @@ esp_err_t sht4x_measure(sht4x_t *device_desc);
  * @param[out] humidity	  		variable to put the measured humidity into
  * @return esp_err_t			`ESP_OK` on success
  */
-esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidity)
+esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidity);
 
 
 

@@ -26,8 +26,7 @@
 #define CHECK(x) do { esp_err_t __; if ((__ = x) != ESP_OK) return __; } while (0)
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
 #define COMPARE_VAL(x, y) do { if (x != y) ret = ESP_FAIL; } while (0)
-//#define LOG_IF_ERR(x, log_tag, format, ...) \ 
-//	do { if (x != ESP_OK) ESP_LOGE(log_tag, "%s(%d): " format, __FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+
 
 
 // Used together with device_access_mutex in sht4x_t to deny access for specific periods when the sensor is measuring, soft-resetting (IN MICROSECONDS)
@@ -98,7 +97,10 @@ static inline sht4x_access_timeoff_t get_access_restrict_time(sht4x_t *device_de
 	else
 	{
 		return HIGH_REPEAT_TIMEOFF;
-	}	
+	}
+	
+	// Non-reachable. For compilers happiness
+	return HIGH_REPEAT_TIMEOFF;	
 }
 
 static inline uint8_t get_cmd(sht4x_t *device_desc)
@@ -115,6 +117,7 @@ static inline uint8_t get_cmd(sht4x_t *device_desc)
 					case SHT4X_REPEAT_LOW:
 						return CMD_MEAS_LOW;
 				}
+				break;
 			case SHT4X_HEATER_HIGH_LONG:
 				return CMD_MEAS_H_HIGH_LONG;
 			case SHT4X_HEATER_HIGH_SHORT:
@@ -127,7 +130,10 @@ static inline uint8_t get_cmd(sht4x_t *device_desc)
 				return CMD_MEAS_H_LOW_LONG;
 			case SHT4X_HEATER_LOW_SHORT:
 				return CMD_MEAS_H_LOW_SHORT;
-		}	
+		}
+		
+		// Non-reachable. For compilers happiness
+		return SHT4X_REPEAT_HIGH;
 }
 
 // Callback used in esp_timer_create
