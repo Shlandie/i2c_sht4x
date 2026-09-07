@@ -5,6 +5,6 @@ idf_component_register(
     SRCS main.c         
     INCLUDE_DIRS        
     PRIV_INCLUDE_DIRS   
-    REQUIRES      
+    REQUIRES		i2c_sht4x  
     PRIV_REQUIRES       
 )

@@ -42,12 +42,12 @@ typedef enum
 static const char TAG[] = "I2C_SHT4X";
 
 
-static inline uint8_t crop_humidity(uint16_t humidity_data)
+static inline int8_t crop_humidity(uint16_t humidity_data)
 {
 	// Calculate humidity only using integers. Multiply by 100 because need precision from floats
 	int32_t humidity = (-6 * 100 + (125 * 100 * humidity_data) / 65535);
 	// Round to closest integer
-	humidity += 500;
+	humidity += 50;
 	// Loose the integer multiplication caused by the absence of floats
 	humidity /= 100;
 	
@@ -173,9 +173,10 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 	ret = i2c_master_bus_add_device(master_bus_ctx->master_bus_handle, &dev_config, &(device_desc->dev_handle));
 	ESP_RETURN_ON_ERROR(ret, TAG, "SHT4X I2C DEVICE INIT FAILED");
 	
-	// Get port mutex on device descriptor for easier access and create mutex for device access
+	// Get port mutex on device descriptor for easier access and create binary semaphore for device access
 	device_desc->master_bus_mutex = master_bus_ctx->master_bus_mutex;
-	device_desc->device_access_mutex = xSemaphoreCreateMutex();
+	device_desc->device_access_mutex = xSemaphoreCreateBinary();
+	xSemaphoreGive(device_desc->device_access_mutex);
 	
 	// Create timer which callbacks to give the device access mutex back
 	const esp_timer_create_args_t timer_args = {
@@ -186,7 +187,6 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 	};
 	ret = esp_timer_create(&timer_args, &(device_desc->timer));
 	ESP_RETURN_ON_ERROR(ret, TAG, "SHT4X DEVICE TIMER CREATION FOR ACCESS MUTEX MANAGMENT FAILED");
-	
 	
 	ESP_LOGI(TAG, "SHT4X device initialized successfully");	
 	return ret;
@@ -259,7 +259,7 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	return ret;	
 }
 
-esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidity)
+esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity)
 {
 	// Take current device semaphore
 	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
@@ -288,7 +288,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidi
 	{
 		// If ESP_OK calculate and put data into supplied pointer
 		uint16_t temperature_data 	= ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
-		*temperature	= ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 500) / 100;
+		*temperature	= ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 50) / 100;
 	}
 	
 	// CRC check humidity data
@@ -300,8 +300,8 @@ esp_err_t sht4x_read(sht4x_t *device_desc, uint8_t *temperature, uint8_t *humidi
 	}
 	else 
 	{
-		uint16_t temperature_data 	= ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
-		*temperature	= ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 500) / 100;
+		uint16_t humidity_data 	= ((uint16_t)read_buffer[3] << 8 | read_buffer[4]);
+		*humidity	= crop_humidity(humidity_data);
 	}
 	
 	// Give back current device access semaphore and return
