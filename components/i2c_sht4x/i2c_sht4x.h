@@ -106,7 +106,7 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc);
 esp_err_t sht4x_measure(sht4x_t *device_desc);
 
 /*
- * Send command I2C read to retrieve temperature and humidity data from the sensor. Data returns in integer format
+ * I2C read to retrieve temperature and humidity data from the sensor. Data returns in integer format
  * @param device_desc			sht4x_t device desriptor
  * @param[out] temperature  	variable to put the measured temperature into
  * @param[out] humidity	  		variable to put the measured humidity into
@@ -114,6 +114,12 @@ esp_err_t sht4x_measure(sht4x_t *device_desc);
  */
 esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity);
 
-
+/*
+ * I2C read to get the serial number of the device 
+ * @param device_desc			sht4x_t device desriptor
+ * @param[out] serial_number	current devices serial number
+ * @return esp_err_t			`ESP_OK` on success
+*/
+esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number);
 
 
