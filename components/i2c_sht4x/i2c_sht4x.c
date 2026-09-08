@@ -204,25 +204,23 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 	const uint8_t cmd = CMD_SOFT_RESET;	
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup2, TAG, "I2C SOFT-RESET CMD TRANSMISSION FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "I2C SOFT-RESET CMD TRANSMISSION FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	ESP_LOGI(TAG, "SHT4X device (soft) reset command sent");
 	
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	ret = esp_timer_start_once(device_desc->timer, SOFT_RESET_TIMEOFF);
-	ESP_GOTO_ON_ERROR(ret, cleanup1, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
 	
 	return ret;
 	
-	cleanup1:
-	xSemaphoreGive(device_desc->device_access_mutex);
-	return ret;
-
-	cleanup2:
+	cleanup_master_bus:
 	xSemaphoreGive(device_desc->master_bus_mutex);
+
+	cleanup:
 	xSemaphoreGive(device_desc->device_access_mutex);
-	return ret;
+	return ret;	
 }
 
 esp_err_t sht4x_measure(sht4x_t *device_desc)
@@ -237,7 +235,7 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	uint8_t cmd = get_cmd(device_desc);
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup2, TAG, "I2C MEASURE CMD TRANSMISSION FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "I2C MEASURE CMD TRANSMISSION FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	ESP_LOGI(TAG, "SHT4X device measurement command sent");
@@ -245,16 +243,14 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	sht4x_access_timeoff_t delay = get_access_restrict_time(device_desc);
 	ret = esp_timer_start_once(device_desc->timer, delay);
-	ESP_GOTO_ON_ERROR(ret, cleanup1, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
 	
 	return ret;
 	
-	cleanup1:
-	xSemaphoreGive(device_desc->device_access_mutex);
-	return ret;
-	
-	cleanup2:
+	cleanup_master_bus:
 	xSemaphoreGive(device_desc->master_bus_mutex);
+	
+	cleanup:
 	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
 }
@@ -271,15 +267,18 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup2, TAG, "I2C READ FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C TEMP/HUMID READ FAILED");
 	xSemaphoreGive(device_desc->master_bus_mutex);
+	
+	
 	
 	// Check data validity via CRC
 	// CRC check temperatues data 
 	uint8_t crc = crc_check(&read_buffer[0]);
-	// Compare calculated vs sent CRC values
+	// Compare calculated vs sent CRC values. ret = ESP_FAIL if not equal
 	COMPARE_VAL(crc, read_buffer[2]);
-	if(ret == ESP_FAIL)
+	esp_err_t ret_temp = ret;
+	if(ret_temp == ESP_FAIL)
 	{
 		ESP_LOGE(TAG, "CRC check for temperature failed");
 		ret = ESP_OK;
@@ -294,7 +293,8 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity
 	// CRC check humidity data
 	crc = crc_check(&read_buffer[3]);
 	COMPARE_VAL(crc, read_buffer[5]);
-	if(ret == ESP_FAIL)
+	esp_err_t ret_humid = ret;
+	if(ret_humid == ESP_FAIL)
 	{
 		ESP_LOGE(TAG, "CRC check for humidity failed");
 	}
@@ -306,12 +306,58 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity
 	
 	// Give back current device access semaphore and return
 	xSemaphoreGive(device_desc->device_access_mutex);
-	return ret;	
+	if(ret_temp == ESP_FAIL || ret_humid == ESP_FAIL)
+		return ESP_FAIL;
+	else
+		return ESP_OK;	
 	
-	cleanup2:
+	cleanup:
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
 }
 
+esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number)
+{
+	// Take current device semaphore
+	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
+		
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
+	
+	// Take port mutex which the current device is on. Send the measure command
+	const uint8_t cmd = CMD_SERIAL;
+	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
+	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	ret = i2c_master_transmit_receive(device_desc->dev_handle, &cmd, CMD_LENGTH, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
+	ESP_GOTO_ON_ERROR(ret, cleanup_w_master, TAG, "I2C SERIAL NUMBER READ FAILED");
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	
+	// Check data validity via CRC
+	uint8_t crc = crc_check(&read_buffer[0]);
+	// Compare calculated vs sent CRC values. ret = ESP_FAIL if not equal
+	COMPARE_VAL(crc, read_buffer[2]);
+	if(ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "CRC check for serial number failed");
+		goto cleanup;
+	}
+	crc = crc_check(&read_buffer[3]);
+	COMPARE_VAL(crc, read_buffer[5]);
+	if(ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "CRC check for serial number failed");
+		goto cleanup;
+	}
+	*serial_number = ((uint32_t)read_buffer[0] << 24 | (uint32_t)read_buffer[1] << 16 | (uint32_t)read_buffer[3] << 8 | (uint32_t)read_buffer[4]);
+	
+	cleanup:
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;
+
+	cleanup_w_master:
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;	
+}
 
