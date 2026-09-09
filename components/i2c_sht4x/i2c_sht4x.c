@@ -21,7 +21,7 @@
 #define CMD_MEAS_H_LOW_LONG   		0x1e
 #define CMD_MEAS_H_LOW_SHORT  		0x15
 
-#define DATA_READ_LENGTH			6
+#define DATA_READ_LENGTH			6				
 
 #define CHECK(x) do { esp_err_t __; if ((__ = x) != ESP_OK) return __; } while (0)
 #define CHECK_ARG(VAL) do { if (!(VAL)) return ESP_ERR_INVALID_ARG; } while (0)
@@ -45,14 +45,10 @@ static const char TAG[] = "I2C_SHT4X";
 static inline int8_t crop_humidity(uint16_t humidity_data)
 {
 	// Calculate humidity only using integers. Multiply by 100 because need precision from floats
-	int32_t humidity = (-6 * 100 + (125 * 100 * humidity_data) / 65535);
-	// Round to closest integer
-	humidity += 50;
-	// Loose the integer multiplication caused by the absence of floats
-	humidity /= 100;
-	
+	int32_t humidity = (-6 * SHT4X_INTEGER_PRECISION + (125 * SHT4X_INTEGER_PRECISION * humidity_data) / 65535);
+
 	// Humidity can be above 100 or below 0. Remove that
-	if (humidity > 100)
+	if (humidity > 100 * SHT4X_INTEGER_PRECISION)
 	{
 		return 100;
 	}
@@ -255,7 +251,7 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	return ret;	
 }
 
-esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity)
+esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidity)
 {
 	// Take current device semaphore
 	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
@@ -286,8 +282,8 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity
 	else 
 	{
 		// If ESP_OK calculate and put data into supplied pointer
-		uint16_t temperature_data 	= ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
-		*temperature	= ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 50) / 100;
+		uint16_t temperature_data = ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
+		*temperature = ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 50) / 100;
 	}
 	
 	// CRC check humidity data
@@ -300,8 +296,68 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity
 	}
 	else 
 	{
-		uint16_t humidity_data 	= ((uint16_t)read_buffer[3] << 8 | read_buffer[4]);
-		*humidity	= crop_humidity(humidity_data);
+		uint16_t humidity_data = ((uint16_t)read_buffer[3] << 8 | read_buffer[4]);
+		*humidity = crop_humidity(humidity_data);
+	}
+	
+	// Give back current device access semaphore and return
+	xSemaphoreGive(device_desc->device_access_mutex);
+	if(ret_temp == ESP_FAIL || ret_humid == ESP_FAIL)
+		return ESP_FAIL;
+	else
+		return ESP_OK;	
+	
+	cleanup:
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	xSemaphoreGive(device_desc->device_access_mutex);
+	return ret;	
+}
+
+esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humidity)
+{
+	// Take current device semaphore
+	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
+		
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
+	
+	// Take port mutex which the current device is on. Send I2C read
+	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
+	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C TEMP/HUMID READ FAILED");
+	xSemaphoreGive(device_desc->master_bus_mutex);
+	
+	// Check data validity via CRC
+	// CRC check temperatues data 
+	uint8_t crc = crc_check(&read_buffer[0]);
+	// Compare calculated vs sent CRC values. ret = ESP_FAIL if not equal
+	COMPARE_VAL(crc, read_buffer[2]);
+	esp_err_t ret_temp = ret;
+	if(ret_temp == ESP_FAIL)
+	{
+		ESP_LOGE(TAG, "CRC check for temperature failed");
+		ret = ESP_OK;
+	}
+	else 
+	{
+		// If ESP_OK calculate and put data into supplied pointer
+		uint16_t temperature_data = ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
+		*temperature = (-45 + (175.0f * temperature_data / 65535));
+	}
+	
+	// CRC check humidity data
+	crc = crc_check(&read_buffer[3]);
+	COMPARE_VAL(crc, read_buffer[5]);
+	esp_err_t ret_humid = ret;
+	if(ret_humid == ESP_FAIL)
+	{
+		ESP_LOGE(TAG, "CRC check for humidity failed");
+	}
+	else 
+	{
+		uint16_t humidity_data = ((uint16_t)read_buffer[3] << 8 | read_buffer[4]);
+		*humidity = (-6 + (125.0f * humidity_data / 65535));
 	}
 	
 	// Give back current device access semaphore and return

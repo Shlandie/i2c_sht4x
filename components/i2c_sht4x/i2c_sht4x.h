@@ -12,8 +12,9 @@
 #define SHT4X_DEVICE_MUTEX_TIMEOUT				100
 #define SHT4X_TRANSACTION_TIMEOUT				100
 
+#define SHT4X_INTEGER_PRECISION					10000000				// (MAX 7 0's) The precision of the data in the data retrieval function that uses integers for its caluclations. (f.e no precision = 0 would return 5 but with precision of 2 would return 523)
 
-// Sensor repeatability mode when measuring
+
 typedef enum
 {
 	SHT4X_REPEAT_HIGH = 0,				// Measuring time: 8.3ms
@@ -112,7 +113,16 @@ esp_err_t sht4x_measure(sht4x_t *device_desc);
  * @param[out] humidity	  		variable to put the measured humidity into
  * @return esp_err_t			`ESP_OK` on success
  */
-esp_err_t sht4x_read(sht4x_t *device_desc, int8_t *temperature, int8_t *humidity);
+esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidity);
+
+/*
+ * I2C read to retrieve temperature and humidity data from the sensor. Data returns in float format
+ * @param device_desc			sht4x_t device desriptor
+ * @param[out] temperature  	variable to put the measured temperature into
+ * @param[out] humidity	  		variable to put the measured humidity into
+ * @return esp_err_t			`ESP_OK` on success
+ */
+esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humidity);
 
 /*
  * I2C read to get the serial number of the device 
