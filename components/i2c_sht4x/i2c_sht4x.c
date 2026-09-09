@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "driver/i2c_master.h"
 #include "esp_check.h"
@@ -42,11 +43,10 @@ typedef enum
 static const char TAG[] = "I2C_SHT4X";
 
 
-static inline int8_t crop_humidity(uint16_t humidity_data)
+static inline int32_t crop_humidity(uint16_t humidity_data)
 {
 	// Calculate humidity only using integers. Multiply by 100 because need precision from floats
-	int32_t humidity = (-6 * SHT4X_INTEGER_PRECISION + (125 * SHT4X_INTEGER_PRECISION * humidity_data) / 65535);
-
+	int32_t humidity = (-6 * SHT4X_INTEGER_PRECISION + ((int64_t)125 * SHT4X_INTEGER_PRECISION * humidity_data) / 65535);
 	// Humidity can be above 100 or below 0. Remove that
 	if (humidity > 100 * SHT4X_INTEGER_PRECISION)
 	{
@@ -283,7 +283,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 	{
 		// If ESP_OK calculate and put data into supplied pointer
 		uint16_t temperature_data = ((uint16_t)read_buffer[0] << 8 | read_buffer[1]);
-		*temperature = ((-45 * 100 + (175 * 100 * temperature_data) / 65535) + 50) / 100;
+		*temperature = (-45 * SHT4X_INTEGER_PRECISION + ((uint64_t)175 * SHT4X_INTEGER_PRECISION * temperature_data) / 65535);
 	}
 	
 	// CRC check humidity data
