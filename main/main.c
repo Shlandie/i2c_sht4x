@@ -6,7 +6,8 @@
 #include "i2c_sht4x.h"
 
 
-#define I2C_PORT_1			1
+#define I2C_PORT_1						1
+#define INTEGER_FRACTION_SIZE			100
 
 
 sht4x_i2c_master_bus_ctx_t master_bus = {0};
@@ -15,14 +16,14 @@ sht4x_t device = {0};
 int32_t temperature, humidity;
 float temperature_f, humidity_f;
 
-
+// Calculates the whole and fractional part from the temperate and humidity huge integer values. Fraction is 2 decimal places. Change how many decimal places by INTEGER_FRACTION_SIZE
 static inline void get_whole_and_fraction(int32_t full_value, int8_t *whole, int8_t *fraction)
 {
 	*whole = full_value / SHT4X_INTEGER_PRECISION;
 	
 	int32_t remainder = full_value % SHT4X_INTEGER_PRECISION;
 	
-	int32_t fraction_precision = SHT4X_INTEGER_PRECISION / 100;
+	int32_t fraction_precision = SHT4X_INTEGER_PRECISION / INTEGER_FRACTION_SIZE;
 	*fraction = remainder / fraction_precision;
 	
 	if (*fraction < 0)
@@ -31,6 +32,7 @@ static inline void get_whole_and_fraction(int32_t full_value, int8_t *whole, int
     }
 }
 
+// Initialize the master bus and the SHT4X device
 static void initilization()
 {
 	i2c_master_bus_config_t master_bus_cfg = 
@@ -48,7 +50,6 @@ static void initilization()
 
 void app_main(void)
 {
-	vTaskDelay(pdMS_TO_TICKS(500));
 	initilization();
 
 	int8_t whole_temp = 0, fraction_temp = 0;
@@ -61,13 +62,13 @@ void app_main(void)
 		sht4x_read(&device, &temperature, &humidity);
 		get_whole_and_fraction(temperature, &whole_temp, &fraction_temp);
 		get_whole_and_fraction(humidity, &whole_humid, &fraction_humid);
-		printf("Temperature: %" PRId8 ".%" PRId8 "C Humidity: %" PRId8 ".%" PRId8 "%%", whole_temp, fraction_temp, whole_humid, fraction_humid);
+		printf("(INTEGER) Temperature: %" PRId8 ".%" PRId8 "C Humidity: %" PRId8 ".%" PRId8 "%%", whole_temp, fraction_temp, whole_humid, fraction_humid);
 		vTaskDelay(pdMS_TO_TICKS(1000));
 		
 		// Uses floats
 		sht4x_measure(&device);
 		sht4x_read_float(&device, &temperature_f, &humidity_f);
-		printf("Temperature: %fC, Humidity: %f%%", temperature_f, humidity_f);
+		printf("(FLOAT) Temperature: %fC, Humidity: %f%%", temperature_f, humidity_f);
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
