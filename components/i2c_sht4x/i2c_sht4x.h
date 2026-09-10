@@ -69,7 +69,9 @@ typedef struct sht4x
 	SemaphoreHandle_t master_bus_mutex;				// Place to hold the mutex for the port the device uses
 	
 	SemaphoreHandle_t device_access_mutex;			// Protects access to the device while it's measuring, booting from soft-reset  							 
-	esp_timer_handle_t timer;				// To track the callback that give the device_access_mutex
+	esp_timer_handle_t timer;						// To track the callback that give the device_access_mutex
+	
+	const char *name;								// Holds the name of the device. Used for debugging print messages
 }sht4x_t;
 
 
@@ -90,7 +92,7 @@ esp_err_t sht4x_i2c_master_bus_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, 
 * @param disable_ack_check		Disable ACK check. If this is set false, that means ack check is enabled, the transaction will be stopped and API returns error when nack is detected.		
 * @return esp_err_t				`ESP_OK` on success
 */
-esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
+esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc, const char *device_name,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check);
 
 /*
  * Soft resets the sht4x device

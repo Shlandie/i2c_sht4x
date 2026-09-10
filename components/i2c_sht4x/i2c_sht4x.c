@@ -154,9 +154,19 @@ esp_err_t sht4x_i2c_master_bus_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, 
 	return ret;
 }
 
-esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check)
+esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4x_t *device_desc, const char *device_name,  sht4x_scl_adress_t device_addr, sht4x_scl_speed_t speed_mode, bool disable_ack_check)
 {
 	esp_err_t ret = ESP_OK;
+	
+	// Append device name to device descriptor to be able to use it instantly
+	if(device_name != NULL)
+	{
+		device_desc->name = device_name;
+	}
+	else
+	{
+		device_desc->name = "";	
+	}
 	
 	// Initialize SHT4X device on the given I2C port
 	i2c_device_config_t dev_config = {
@@ -167,7 +177,7 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 		.flags.disable_ack_check 	= disable_ack_check 
 	};
 	ret = i2c_master_bus_add_device(master_bus_ctx->master_bus_handle, &dev_config, &(device_desc->dev_handle));
-	ESP_RETURN_ON_ERROR(ret, TAG, "SHT4X I2C DEVICE INIT FAILED");
+	ESP_RETURN_ON_ERROR(ret, TAG, "%s, SHT4X I2C DEVICE INIT FAILED", device_desc->name);
 	
 	// Get port mutex on device descriptor for easier access and create binary semaphore for device access
 	device_desc->master_bus_mutex = master_bus_ctx->master_bus_mutex;
@@ -182,9 +192,9 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 		.arg = device_desc
 	};
 	ret = esp_timer_create(&timer_args, &(device_desc->timer));
-	ESP_RETURN_ON_ERROR(ret, TAG, "SHT4X DEVICE TIMER CREATION FOR ACCESS MUTEX MANAGMENT FAILED");
+	ESP_RETURN_ON_ERROR(ret, TAG, "%s, SHT4X DEVICE TIMER CREATION FOR ACCESS MUTEX MANAGMENT FAILED", device_desc->name);
 	
-	ESP_LOGI(TAG, "SHT4X device initialized successfully");	
+	ESP_LOGI(TAG, "%s, SHT4X device initialized successfully", device_desc->name);	
 	return ret;
 }
 
@@ -200,14 +210,14 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 	const uint8_t cmd = CMD_SOFT_RESET;	
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "I2C SOFT-RESET CMD TRANSMISSION FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "%s, I2C SOFT-RESET CMD TRANSMISSION FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
-	ESP_LOGI(TAG, "SHT4X device (soft) reset command sent");
+	ESP_LOGI(TAG, "%s, SHT4X device (soft) reset command sent", device_desc->name);
 	
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	ret = esp_timer_start_once(device_desc->timer, SOFT_RESET_TIMEOFF);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", SOFT_RESET_TIMEOFF);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON SOFT-RESET). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", device_desc->name, SOFT_RESET_TIMEOFF);
 	
 	return ret;
 	
@@ -231,15 +241,15 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 	uint8_t cmd = get_cmd(device_desc);
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "I2C MEASURE CMD TRANSMISSION FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "%s, I2C MEASURE CMD TRANSMISSION FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
-	ESP_LOGI(TAG, "SHT4X device measurement command sent");
+	ESP_LOGI(TAG, "%s, SHT4X device measurement command sent", device_desc->name);
 	
 	// Create timer for callback which returns access (gives device access mutex back) to the device after a safe period has elapsed
 	sht4x_access_timeoff_t delay = get_access_restrict_time(device_desc);
 	ret = esp_timer_start_once(device_desc->timer, delay);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", delay);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, FAILED TO START TIMER FOR DEVICE ACCESS MUTEX RESTORE (ON MEASURE). DON'T ACCESS DEVICE FOR ATLEAST %d SECOND(S)", device_desc->name, delay);
 	
 	return ret;
 	
@@ -263,7 +273,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C TEMP/HUMID READ FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, I2C TEMP/HUMID READ FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	
@@ -276,7 +286,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 	esp_err_t ret_temp = ret;
 	if(ret_temp == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "CRC check for temperature failed");
+		ESP_LOGE(TAG, "%s, CRC check for temperature failed", device_desc->name);
 		ret = ESP_OK;
 	}
 	else 
@@ -292,7 +302,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 	esp_err_t ret_humid = ret;
 	if(ret_humid == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "CRC check for humidity failed");
+		ESP_LOGE(TAG, "%s, CRC check for humidity failed", device_desc->name);
 	}
 	else 
 	{
@@ -325,7 +335,7 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "I2C TEMP/HUMID READ FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, I2C TEMP/HUMID READ FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	// Check data validity via CRC
@@ -336,7 +346,7 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 	esp_err_t ret_temp = ret;
 	if(ret_temp == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "CRC check for temperature failed");
+		ESP_LOGE(TAG, "%s, CRC check for temperature failed", device_desc->name);
 		ret = ESP_OK;
 	}
 	else 
@@ -352,7 +362,7 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 	esp_err_t ret_humid = ret;
 	if(ret_humid == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "CRC check for humidity failed");
+		ESP_LOGE(TAG, "%s, CRC check for humidity failed", device_desc->name);
 	}
 	else 
 	{
@@ -386,7 +396,7 @@ esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number)
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
 	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
 	ret = i2c_master_transmit_receive(device_desc->dev_handle, &cmd, CMD_LENGTH, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
-	ESP_GOTO_ON_ERROR(ret, cleanup_w_master, TAG, "I2C SERIAL NUMBER READ FAILED");
+	ESP_GOTO_ON_ERROR(ret, cleanup_w_master, TAG, "%s, I2C SERIAL NUMBER READ FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
 	
 	// Check data validity via CRC
@@ -395,14 +405,14 @@ esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number)
 	COMPARE_VAL(crc, read_buffer[2]);
 	if(ret != ESP_OK)
 	{
-		ESP_LOGE(TAG, "CRC check for serial number failed");
+		ESP_LOGE(TAG, "%s, CRC check for serial number failed", device_desc->name);
 		goto cleanup;
 	}
 	crc = crc_check(&read_buffer[3]);
 	COMPARE_VAL(crc, read_buffer[5]);
 	if(ret != ESP_OK)
 	{
-		ESP_LOGE(TAG, "CRC check for serial number failed");
+		ESP_LOGE(TAG, "%s, CRC check for serial number failed", device_desc->name);
 		goto cleanup;
 	}
 	*serial_number = ((uint32_t)read_buffer[0] << 24 | (uint32_t)read_buffer[1] << 16 | (uint32_t)read_buffer[3] << 8 | (uint32_t)read_buffer[4]);

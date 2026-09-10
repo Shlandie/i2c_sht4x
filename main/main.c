@@ -44,7 +44,7 @@ static void initilization()
 	};
 		
 	sht4x_i2c_master_bus_init(&master_bus, master_bus_cfg);
-	sht4x_i2c_device_init(&master_bus, &device, SHT4X_ADDR_1, STANDARD, false);
+	sht4x_i2c_device_init(&master_bus, &device, "DEVICE_NUMBER_1", SHT4X_ADDR_1, STANDARD, false);
 }
 
 
@@ -57,6 +57,10 @@ void app_main(void)
 	
 	while(1)
 	{
+		// Set/Change device behavior
+		device.heater = SHT4X_HEATER_OFF;				// OFF BY DEFAULT
+		device.repeatability = SHT4X_REPEAT_HIGH;		// HIGH BY DEFAULT
+		
 		// Integers only
 		sht4x_measure(&device);
 		sht4x_read(&device, &temperature, &humidity);
