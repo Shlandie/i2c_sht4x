@@ -4,6 +4,7 @@
 
 #include "driver/i2c_master.h"
 #include "esp_check.h"
+#include "esp_err.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "i2c_sht4x.h"
@@ -200,15 +201,23 @@ esp_err_t sht4x_i2c_device_init(sht4x_i2c_master_bus_ctx_t *master_bus_ctx, sht4
 
 esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 {
-	// Take current device semaphore
-	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
-	
 	// esp_err_t for ESP error handling macros
 	esp_err_t ret = ESP_OK;
 	
+	// Take current device semaphore. Return ESP_ERR_TIMEOUT if timeout
+	if(!xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, DEVICE ACCESS SEMAPHORE TIMEOUT ON RESET COMMAND", device_desc->name);
+	}
+	
 	// Take port mutex which the current device is on. Send the reset command
-	const uint8_t cmd = CMD_SOFT_RESET;	
-	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	const uint8_t cmd = CMD_SOFT_RESET;
+	if(!xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, MASTER BUS SEMAPHORE TIMEOUT ON RESET COMMAND", device_desc->name);
+	}	
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
 	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "%s, I2C SOFT-RESET CMD TRANSMISSION FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
@@ -231,15 +240,23 @@ esp_err_t sht4x_reset_device(sht4x_t *device_desc)
 
 esp_err_t sht4x_measure(sht4x_t *device_desc)
 {
-	// Take current device semaphore
-	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
-	
 	// esp_err_t for ESP error handling macros
 	esp_err_t ret = ESP_OK;
 	
+	// Take current device semaphore. Return ESP_ERR_TIMEOUT if timeout
+	if(!xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, DEVICE ACCESS SEMAPHORE TIMEOUT ON MEASURE COMMAND", device_desc->name);
+	}
+	
 	// Take port mutex which the current device is on. Send the measure command
 	uint8_t cmd = get_cmd(device_desc);
-	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	if(!xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, MASTER BUS SEMAPHORE TIMEOUT ON MEASURE COMMAND", device_desc->name);
+	}
 	ret = i2c_master_transmit(device_desc->dev_handle, &cmd, CMD_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
 	ESP_GOTO_ON_ERROR(ret, cleanup_master_bus, TAG, "%s, I2C MEASURE CMD TRANSMISSION FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
@@ -263,15 +280,23 @@ esp_err_t sht4x_measure(sht4x_t *device_desc)
 
 esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidity)
 {
-	// Take current device semaphore
-	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
-		
 	// esp_err_t for ESP error handling macros
 	esp_err_t ret = ESP_OK;
 	
+	// Take current device semaphore. Return ESP_ERR_TIMEOUT if timeout
+	if(!xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, DEVICE ACCESS SEMAPHORE TIMEOUT ON READ (INTEGER)", device_desc->name);
+	}
+	
 	// Take port mutex which the current device is on. Send I2C read
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
-	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	if(!xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, MASTER BUS SEMAPHORE TIMEOUT ON READ (INTEGER)", device_desc->name);
+	}
 	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
 	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, I2C TEMP/HUMID READ FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
@@ -286,7 +311,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 	esp_err_t ret_temp = ret;
 	if(ret_temp == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "%s, CRC check for temperature failed", device_desc->name);
+		ESP_LOGE(TAG, "%s, CRC check for temperature failed (INTEGER)", device_desc->name);
 		ret = ESP_OK;
 	}
 	else 
@@ -302,7 +327,7 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 	esp_err_t ret_humid = ret;
 	if(ret_humid == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "%s, CRC check for humidity failed", device_desc->name);
+		ESP_LOGE(TAG, "%s, CRC check for humidity failed (INTEGER)", device_desc->name);
 	}
 	else 
 	{
@@ -325,15 +350,23 @@ esp_err_t sht4x_read(sht4x_t *device_desc, int32_t *temperature, int32_t *humidi
 
 esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humidity)
 {
-	// Take current device semaphore
-	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
-		
 	// esp_err_t for ESP error handling macros
 	esp_err_t ret = ESP_OK;
 	
+	// Take current device semaphore. Return ESP_ERR_TIMEOUT if timeout
+	if(!xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, DEVICE ACCESS SEMAPHORE TIMEOUT ON READ (FLOAT)", device_desc->name);
+	}
+	
 	// Take port mutex which the current device is on. Send I2C read
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
-	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	if(!xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, MASTER BUS SEMAPHORE TIMEOUT ON READ (FLOAT)", device_desc->name);
+	}
 	ret = i2c_master_receive(device_desc->dev_handle, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
 	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, I2C TEMP/HUMID READ FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
@@ -346,7 +379,7 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 	esp_err_t ret_temp = ret;
 	if(ret_temp == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "%s, CRC check for temperature failed", device_desc->name);
+		ESP_LOGE(TAG, "%s, CRC check for temperature failed (FLOAT)", device_desc->name);
 		ret = ESP_OK;
 	}
 	else 
@@ -362,7 +395,7 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 	esp_err_t ret_humid = ret;
 	if(ret_humid == ESP_FAIL)
 	{
-		ESP_LOGE(TAG, "%s, CRC check for humidity failed", device_desc->name);
+		ESP_LOGE(TAG, "%s, CRC check for humidity failed (FLOAT)", device_desc->name);
 	}
 	else 
 	{
@@ -385,16 +418,24 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 
 esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number)
 {
-	// Take current device semaphore
-	xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT));
-		
 	// esp_err_t for ESP error handling macros
 	esp_err_t ret = ESP_OK;
+	
+	// Take current device semaphore. Return ESP_ERR_TIMEOUT if timeout
+	if(!xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, DEVICE ACCESS SEMAPHORE TIMEOUT ON SERIAL NUMBER COMMAND", device_desc->name);
+	}
 	
 	// Take port mutex which the current device is on. Send the measure command
 	const uint8_t cmd = CMD_SERIAL;
 	uint8_t read_buffer[DATA_READ_LENGTH] = {0};
-	xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT));
+	if(!xSemaphoreTake(device_desc->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, MASTER BUS SEMAPHORE TIMEOUT ON SERIAL NUMBER COMMAND", device_desc->name);
+	}
 	ret = i2c_master_transmit_receive(device_desc->dev_handle, &cmd, CMD_LENGTH, read_buffer, DATA_READ_LENGTH, SHT4X_TRANSACTION_TIMEOUT);
 	ESP_GOTO_ON_ERROR(ret, cleanup_w_master, TAG, "%s, I2C SERIAL NUMBER READ FAILED", device_desc->name);
 	xSemaphoreGive(device_desc->master_bus_mutex);
