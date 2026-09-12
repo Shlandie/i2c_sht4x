@@ -134,4 +134,46 @@ esp_err_t sht4x_read_float(sht4x_t *device_desc, float *temperature, float *humi
 */
 esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number);
 
+/*
+ * Free memory from the sht4x_i2c_master_bus_ctx_t. Uninitializes the I2C port making it unusable
+ * @param sht4x_i2c_master_bus_ctx_t		Struct of the master bus context
+ * @return esp_err_t						`ESP_OK` on success
+ */
+esp_err_t sht4x_free_port(sht4x_i2c_master_bus_ctx_t *master_bus_ctx);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

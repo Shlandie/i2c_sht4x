@@ -468,3 +468,71 @@ esp_err_t sht4x_read_serial(sht4x_t *device_desc, uint32_t *serial_number)
 	return ret;	
 }
 
+esp_err_t sht4x_free_port(sht4x_i2c_master_bus_ctx_t *master_bus_ctx)
+{
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
+	
+	// Make sure the port is not busy before deleting it
+	if(!xSemaphoreTake(master_bus_ctx->master_bus_mutex, pdMS_TO_TICKS(SHT4X_MASTER_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "MASTER BUS SEMAPHORE TIMEOUT ON PORT DELETION");
+	}
+	// Delete port if successful delete the semaphore too
+	ret = i2c_del_master_bus(master_bus_ctx->master_bus_handle);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "PORT DELETION FAILED");
+	xSemaphoreGive(master_bus_ctx->master_bus_mutex);
+	
+	vSemaphoreDelete(master_bus_ctx->master_bus_mutex);
+	
+	return ret;	
+	
+	cleanup:
+	xSemaphoreGive(master_bus_ctx->master_bus_mutex);
+	return ret;	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
