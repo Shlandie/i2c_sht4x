@@ -50,29 +50,34 @@ static void initilization()
 
 void app_main(void)
 {
-	initilization();
-
 	int8_t whole_temp = 0, fraction_temp = 0;
 	int8_t whole_humid = 0, fraction_humid = 0;
 	
 	while(1)
 	{
-		// Set/Change device behavior
-		device.heater = SHT4X_HEATER_OFF;				// OFF BY DEFAULT
-		device.repeatability = SHT4X_REPEAT_HIGH;		// HIGH BY DEFAULT
-		
-		// Integers only
-		sht4x_measure(&device);
-		sht4x_read(&device, &temperature, &humidity);
-		get_whole_and_fraction(temperature, &whole_temp, &fraction_temp);
-		get_whole_and_fraction(humidity, &whole_humid, &fraction_humid);
-		printf("(INTEGER) Temperature: %" PRId8 ".%" PRId8 "C Humidity: %" PRId8 ".%" PRId8 "%%", whole_temp, fraction_temp, whole_humid, fraction_humid);
-		vTaskDelay(pdMS_TO_TICKS(1000));
-		
-		// Uses floats
-		sht4x_measure(&device);
-		sht4x_read_float(&device, &temperature_f, &humidity_f);
-		printf("(FLOAT) Temperature: %fC, Humidity: %f%%", temperature_f, humidity_f);
-		vTaskDelay(pdMS_TO_TICKS(1000));
+		initilization();
+		for(int8_t i = 0; i < 4; i++)
+		{
+			// Set/Change device behavior
+			device.heater = SHT4X_HEATER_OFF;				// OFF BY DEFAULT
+			device.repeatability = SHT4X_REPEAT_HIGH;		// HIGH BY DEFAULT
+			
+			// Integers only
+			sht4x_measure(&device);
+			sht4x_read(&device, &temperature, &humidity);
+			get_whole_and_fraction(temperature, &whole_temp, &fraction_temp);
+			get_whole_and_fraction(humidity, &whole_humid, &fraction_humid);
+			printf("(INTEGER) Temperature: %" PRId8 ".%" PRId8 "C Humidity: %" PRId8 ".%" PRId8 "%%", whole_temp, fraction_temp, whole_humid, fraction_humid);
+			vTaskDelay(pdMS_TO_TICKS(1000));
+			
+			// Uses floats
+			sht4x_measure(&device);
+			sht4x_read_float(&device, &temperature_f, &humidity_f);
+			printf("(FLOAT) Temperature: %fC, Humidity: %f%%", temperature_f, humidity_f);
+			vTaskDelay(pdMS_TO_TICKS(1000));
+		}
+		// Free all devices and port. Must free all devices associated with that port before deletion
+		sht4x_free_device(&device);
+		sht4x_free_port(&master_bus);
 	}
 }
