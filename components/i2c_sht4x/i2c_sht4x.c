@@ -482,7 +482,6 @@ esp_err_t sht4x_free_port(sht4x_i2c_master_bus_ctx_t *master_bus_ctx)
 	// Delete port if successful delete the semaphore too
 	ret = i2c_del_master_bus(master_bus_ctx->master_bus_handle);
 	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "PORT DELETION FAILED");
-	xSemaphoreGive(master_bus_ctx->master_bus_mutex);
 	
 	vSemaphoreDelete(master_bus_ctx->master_bus_mutex);
 	
@@ -490,6 +489,32 @@ esp_err_t sht4x_free_port(sht4x_i2c_master_bus_ctx_t *master_bus_ctx)
 	
 	cleanup:
 	xSemaphoreGive(master_bus_ctx->master_bus_mutex);
+	return ret;	
+}
+
+esp_err_t sht4x_free_device(sht4x_t *device_desc)
+{
+	// esp_err_t for ESP error handling macros
+	esp_err_t ret = ESP_OK;
+	
+	// Take current device semaphore. Return ESP_ERR_TIMEOUT if timeout
+	if(!xSemaphoreTake(device_desc->device_access_mutex, pdMS_TO_TICKS(SHT4X_DEVICE_MUTEX_TIMEOUT)))
+	{
+		ret = ESP_ERR_TIMEOUT;
+		ESP_RETURN_ON_ERROR(ret, TAG, "%s, DEVICE ACCESS SEMAPHORE TIMEOUT ON DEVICE DELETION", device_desc->name);
+	}
+	// Delete device, its timer if successful delete the device access semaphore too
+	ret = i2c_master_bus_rm_device(device_desc->dev_handle);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, DEVICE DELETION FAILED", device_desc->name);
+	ret = esp_timer_delete(device_desc->timer);
+	ESP_GOTO_ON_ERROR(ret, cleanup, TAG, "%s, DEVICE TIMER DELETION FAILED", device_desc->name);
+	
+	vSemaphoreDelete(device_desc->device_access_mutex);
+	
+	return ret;
+	
+	cleanup:
+	xSemaphoreGive(device_desc->device_access_mutex);
 	return ret;	
 }
 
